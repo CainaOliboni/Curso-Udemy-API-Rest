@@ -4,30 +4,38 @@ import io.github.cainaoliboni.domain.entity.Cliente;
 import io.github.cainaoliboni.domain.entity.ItemPedido;
 import io.github.cainaoliboni.domain.entity.Pedido;
 import io.github.cainaoliboni.domain.entity.Produto;
+import io.github.cainaoliboni.domain.enums.StatusPedido;
 import io.github.cainaoliboni.domain.repository.ClienteDAO;
 import io.github.cainaoliboni.domain.repository.ItemPedidoDAO;
 import io.github.cainaoliboni.domain.repository.PedidoDAO;
 import io.github.cainaoliboni.domain.repository.ProdutoDAO;
+import io.github.cainaoliboni.exception.PedidoNaoEncontradoException;
 import io.github.cainaoliboni.exception.RegraNegocioException;
 import io.github.cainaoliboni.rest.dto.ItemPedidoDTO;
 import io.github.cainaoliboni.rest.dto.PedidoDTO;
 import io.github.cainaoliboni.service.PedidoService;
-import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Service
-@RequiredArgsConstructor
 public class PedidoServiceImpl implements PedidoService {
 
     private final PedidoDAO pedidoDAO;
     private final ClienteDAO clienteDAO;
     private final ProdutoDAO produtoDAO;
     private final ItemPedidoDAO itemPedidoDAO;
+
+    public PedidoServiceImpl(PedidoDAO pedidoDAO, ClienteDAO clienteDAO, ProdutoDAO produtoDAO, ItemPedidoDAO itemPedidoDAO) {
+        this.pedidoDAO = pedidoDAO;
+        this.clienteDAO = clienteDAO;
+        this.produtoDAO = produtoDAO;
+        this.itemPedidoDAO = itemPedidoDAO;
+    }
 
     @Override
     @Transactional
@@ -42,6 +50,7 @@ public class PedidoServiceImpl implements PedidoService {
         pedido.setDataPedido(LocalDate.now());
         pedido.setTotal(dto.getTotal());
         pedido.setCliente(cliente);
+        pedido.setStatus(StatusPedido.REALIZADO);
 
         List<ItemPedido> itemsPedido = converterItems(pedido, dto.getItems());
         pedidoDAO.save(pedido);
@@ -49,6 +58,22 @@ public class PedidoServiceImpl implements PedidoService {
         pedido.setItens(itemsPedido);
 
         return pedido;
+    }
+
+    @Override
+    public Optional<Pedido> obterPedidoCompleto(Integer id) {
+        return pedidoDAO.findByIdFetchItens(id);
+    }
+
+    @Override
+    @Transactional
+    public void atualizaStatus(Integer id, StatusPedido statusPedido) {
+        pedidoDAO
+                .findById(id)
+                .map((pedido -> {
+                    pedido.setStatus(statusPedido);
+                    return pedidoDAO.save(pedido);
+                })).orElseThrow(() -> new PedidoNaoEncontradoException());
     }
 
     private List<ItemPedido> converterItems(Pedido pedido, List<ItemPedidoDTO> items){
